@@ -1,4 +1,7 @@
 #include <gcadapter_evdev.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 void sigint(int sig)
 {
@@ -174,6 +177,8 @@ int main(int argc, char** argv)
     signal(SIGINT, sigint);
 
     gc_adapter_t* adapter;
+    char last_status[256] = "";
+    int stdout_is_tty = isatty(STDOUT_FILENO);
 
     if(gc_adapter_initialize(adapter_index, &adapter))
     {
@@ -188,13 +193,14 @@ int main(int argc, char** argv)
             {
                 gc_adapter_update(adapter);
                 
+                char status[256];
                 if(adapter->open)
                 {
                     char* ports[GC_ADAPTER_PORTS];
                     for(int i = 0; i < GC_ADAPTER_PORTS; i++)
                         ports[i] = port_to_str(adapter, i);
-                    printf("\rAdapter connected (%p) %s %s %s %s   ", 
-                    adapter->usb_device_handle, 
+                    snprintf(status, sizeof(status), "Adapter connected (%p) %s %s %s %s",
+                    adapter->usb_device_handle,
                     ports[0],
                     ports[1],
                     ports[2],
@@ -203,11 +209,18 @@ int main(int argc, char** argv)
                         free(ports[i]);
                 }
                 else if(adapter->reserved)
-                    printf("\rWaiting for adapter... (connected but reserved)");
+                    snprintf(status, sizeof(status), "Waiting for adapter... (connected but reserved)");
                 else
-                    printf("\rWaiting for adapter...                         ");
-                    
-                fflush(stdout);
+                    snprintf(status, sizeof(status), "Waiting for adapter...");
+
+                // Only print on state change; use \r redraw on a tty, plain lines
+                // otherwise so journald doesn't get one giant unterminated line.
+                if(strcmp(status, last_status) != 0)
+                {
+                    printf(stdout_is_tty ? "\r%-60s" : "%s\n", status);
+                    fflush(stdout);
+                    strcpy(last_status, status);
+                }
                 last_update = update;
             }
             
@@ -223,7 +236,15 @@ int main(int argc, char** argv)
                     update_port(adapter, i);
             }
     
-            sched_yield();
+            // When no adapter is open gc_adapter_poll() returns immediately, so
+            // throttle. The open path blocks in libusb and stays unthrottled.
+            if(!adapter->open)
+            {
+                struct timespec idle = { 0, 100 * 1000 * 1000 };
+                nanosleep(&idle, NULL);
+            }
+            else
+                sched_yield();
         }
         
         printf("\n");
