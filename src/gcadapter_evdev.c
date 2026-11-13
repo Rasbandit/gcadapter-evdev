@@ -74,14 +74,25 @@ void initialize_port(gc_adapter_t* adapter, int port)
         
     ioctl(uinput[port], UI_SET_EVBIT, EV_ABS);
    
-    for(int i = ABS_X; i <= ABS_RZ; i++)
+    // Sticks (ABS_X/Y, ABS_RX/RY): use actual GC hardware range ~28-228; no kernel deadzone
+    int stick_axes[] = { ABS_X, ABS_Y, ABS_RX, ABS_RY };
+    for(int i = 0; i < 4; i++)
     {
-        ioctl(uinput[port], UI_SET_ABSBIT, i);
-        evdev_device.absmin[i] = 0;
-        evdev_device.absmax[i] = 255;
-        evdev_device.absfuzz[i] = 4;
-        // sticks get a center deadzone; triggers (ABS_Z/ABS_RZ) do not
-        evdev_device.absflat[i] = (i != ABS_Z && i != ABS_RZ) ? 10 : 0;
+        ioctl(uinput[port], UI_SET_ABSBIT, stick_axes[i]);
+        evdev_device.absmin[stick_axes[i]] = 28;
+        evdev_device.absmax[stick_axes[i]] = 228;
+        evdev_device.absfuzz[stick_axes[i]] = 2;
+        evdev_device.absflat[stick_axes[i]] = 0;
+    }
+    // Triggers (ABS_Z/ABS_RZ): rest near 0 so need full 0-255 range; no deadzone
+    int trigger_axes[] = { ABS_Z, ABS_RZ };
+    for(int i = 0; i < 2; i++)
+    {
+        ioctl(uinput[port], UI_SET_ABSBIT, trigger_axes[i]);
+        evdev_device.absmin[trigger_axes[i]] = 0;
+        evdev_device.absmax[trigger_axes[i]] = 255;
+        evdev_device.absfuzz[trigger_axes[i]] = 2;
+        evdev_device.absflat[trigger_axes[i]] = 0;
     }
     
     write(uinput[port], &evdev_device, sizeof(evdev_device));

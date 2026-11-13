@@ -41,6 +41,6 @@ int evdev_map_buttons[] =
    GC_PAD_BTN_DPAD_LEFT,
    BTN_DPAD_RIGHT,
    GC_PAD_BTN_DPAD_RIGHT,
-   BTN_THUMBR,
+   BTN_TR,
    GC_PAD_BTN_Z
 };
